@@ -1,0 +1,14 @@
+[Unit]
+Description=Expense tracker Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/.venv/bin/tracker bot
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
