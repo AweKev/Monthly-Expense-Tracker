@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime, time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import Application, ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, filters
@@ -153,13 +153,21 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ------------------------------------------------------------------ app
 
+async def set_commands(app: Application) -> None:
+    """Register the command list, so typing "/" in Telegram shows a menu."""
+    try:
+        await app.bot.set_my_commands([BotCommand(name, desc) for name, desc in texts.COMMANDS])
+    except Exception:  # not worth crashing the bot over
+        log.exception("could not set the command menu")
+
+
 def build_app(settings: Settings) -> Application:
     if not settings.telegram_token:
         raise SystemExit("TRACKER_TELEGRAM_TOKEN is empty. See README, 'Telegram bot setup'.")
 
     engine = make_engine(settings.db_url)
     init_db(engine)
-    app = ApplicationBuilder().token(settings.telegram_token).build()
+    app = ApplicationBuilder().token(settings.telegram_token).post_init(set_commands).build()
     app.bot_data.update(engine=engine, settings=settings, source=make_source(settings), lock=asyncio.Lock())
 
     app.add_handler(CommandHandler("start", start))

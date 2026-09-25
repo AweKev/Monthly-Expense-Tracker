@@ -259,3 +259,26 @@ def test_sync_job_sends_alerts_through_telegram_layer(tmp_path):
     query.data = data
     asyncio.run(bot_app.on_button(SimpleNamespace(callback_query=query), context))
     assert edits and "Transfer ke Orang" in edits[0]
+
+
+def test_command_menu_matches_handlers():
+    import asyncio
+
+    from expense_tracker.bot import app as bot_app
+    from expense_tracker.bot import texts
+
+    names = [name for name, _ in texts.COMMANDS]
+    assert names == ["hariini", "bulanini", "budget", "sync", "help"]
+    assert all(1 <= len(desc) <= 256 for _, desc in texts.COMMANDS)
+
+    sent = []
+
+    class FakeBot:
+        async def set_my_commands(self, commands):
+            sent.extend(commands)
+
+    class FakeApp:
+        bot = FakeBot()
+
+    asyncio.run(bot_app.set_commands(FakeApp()))
+    assert [c.command for c in sent] == names

@@ -131,6 +131,15 @@ def budget_report(status: BudgetStatus) -> str:
     return "\n".join(lines)
 
 
+# Shown in Telegram's "/" menu. (command, short description)
+COMMANDS = [
+    ("hariini", "Pengeluaran hari ini"),
+    ("bulanini", "Ringkasan periode ini"),
+    ("budget", "Sisa budget dan jatah besok"),
+    ("sync", "Cek email sekarang"),
+    ("help", "Daftar perintah"),
+]
+
 HELP = (
     "<b>Perintah</b>\n"
     "/hariini - pengeluaran hari ini\n"
