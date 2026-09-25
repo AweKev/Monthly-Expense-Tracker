@@ -90,6 +90,18 @@ It uses long polling, so it runs fine on your laptop with no public URL, but onl
 
 Try it without Gmail: `tracker synthetic`, then set `TRACKER_BOT_SOURCE=eml` and use a separate test database (`TRACKER_DB_URL=sqlite:///data/demo.db`).
 
+## Run it in the background on Windows (no terminal)
+
+Starts the bot hidden every time you log in to Windows. It stops while the laptop is off or asleep, and catches up on missed emails when it wakes up.
+
+```powershell
+deploy\windows\install-autostart.bat     # turn on (also starts it now)
+deploy\windows\stop-bot.bat              # stop it (e.g. to run "tracker bot" yourself)
+deploy\windows\start-bot.vbs             # start it again without logging out
+deploy\windows\uninstall-autostart.bat   # turn auto-start off
+Get-Content data\bot.log -Wait -Tail 20  # watch the log
+```
+
 ## Run it on a server (Google Cloud free e2-micro)
 
 So the bot keeps running without a terminal open. Short version (details in the chat guide):
