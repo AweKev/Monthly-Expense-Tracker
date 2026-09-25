@@ -7,7 +7,8 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Kind, Transaction
+from .categorize import TRANSFER_ORANG
+from .models import Kind, Transaction, TxnType
 from .period import Period, period_starting_in
 
 ADMIN_FEE = "Biaya Admin"
@@ -135,3 +136,95 @@ def period_summary(session: Session, period: Period, today: date | None = None) 
 
 def rupiah(value: int) -> str:
     return "Rp" + f"{value:,}".replace(",", ".")
+
+
+# ------------------------------------------------------------------ any date range, with names per category
+
+@dataclass
+class Item:
+    name: str
+    total: int
+    count: int
+
+
+@dataclass
+class CategoryBlock:
+    category: str
+    total: int
+    items: list[Item]  # who the money went to, biggest first
+    transaction_ids: list[int]
+
+
+@dataclass
+class RangeSummary:
+    start: date  # inclusive
+    end: date  # exclusive
+    spent: int
+    income: int
+    categories: list[CategoryBlock]
+    per_day: dict[date, int]
+    top_merchants: list[Item]  # stores only: no top-ups, transfers to people or internal moves
+    transaction_count: int
+    days_passed: int
+
+    @property
+    def daily_average(self) -> int:
+        return self.spent // self.days_passed if self.days_passed else 0
+
+
+def range_summary(session: Session, start: date, end: date, today: date | None = None) -> RangeSummary:
+    """Spending between start (inclusive) and end (exclusive), grouped by category with the names inside."""
+    today = today or date.today()
+    txns = _in_range(session, datetime.combine(start, datetime.min.time()), datetime.combine(end, datetime.min.time()))
+    per_day = {start + timedelta(days=i): 0 for i in range((end - start).days)}
+    blocks: dict[str, dict] = {}
+    merchants: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    spent = income = count = 0
+
+    for t in txns:
+        if t.kind == Kind.INCOME:
+            income += t.amount
+            count += 1
+            continue
+        value = spending_of(t)
+        if not value:
+            continue
+        count += 1
+        category = t.category if t.kind == Kind.EXPENSE else ADMIN_FEE
+        name = t.counterparty or "(tanpa nama)"
+        block = blocks.setdefault(category, {"total": 0, "items": defaultdict(lambda: [0, 0]), "ids": []})
+        block["total"] += value
+        block["items"][name][0] += value
+        block["items"][name][1] += 1
+        block["ids"].append(t.id)
+        spent += value
+        per_day[t.occurred_at.date()] = per_day.get(t.occurred_at.date(), 0) + value
+        if t.kind == Kind.EXPENSE and t.txn_type != TxnType.TOPUP and t.category != TRANSFER_ORANG:
+            merchants[name][0] += value
+            merchants[name][1] += 1
+
+    def items(d: dict) -> list[Item]:
+        return sorted((Item(n, v[0], v[1]) for n, v in d.items()), key=lambda i: i.total, reverse=True)
+
+    categories = sorted(
+        (CategoryBlock(cat, b["total"], items(b["items"]), b["ids"]) for cat, b in blocks.items()),
+        key=lambda b: b.total, reverse=True,
+    )
+    if today < start:
+        days_passed = 0
+    elif today >= end:
+        days_passed = (end - start).days
+    else:
+        days_passed = (today - start).days + 1
+    return RangeSummary(start, end, spent, income, categories, per_day, items(merchants)[:5], count, days_passed)
+
+
+def rupiah_short(value: int) -> str:
+    """Rp62,4rb / Rp1,2jt: for buttons and name lines where space is tight."""
+    if value < 1_000:
+        return f"Rp{value}"
+    if value < 999_950:
+        text = f"{value / 1_000:.1f}".rstrip("0").rstrip(".")
+        return f"Rp{text.replace('.', ',')}rb"
+    text = f"{value / 1_000_000:.2f}".rstrip("0").rstrip(".")
+    return f"Rp{text.replace('.', ',')}jt"

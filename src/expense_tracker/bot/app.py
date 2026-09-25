@@ -116,8 +116,16 @@ def _report_command(builder):
         settings = context.bot_data["settings"]
         with session_scope(context.bot_data["engine"]) as session:
             reply = builder(session, settings, _now(settings).date())
-        await update.message.reply_text(reply.text, parse_mode=ParseMode.HTML)
+        await _reply(update.message, reply)
     return handler
+
+
+async def _reply(message, reply: Reply) -> None:
+    if reply.photo is not None:
+        await message.reply_photo(reply.photo, caption=reply.text, parse_mode=ParseMode.HTML,
+                                  reply_markup=_markup(reply))
+    else:
+        await message.reply_text(reply.text, parse_mode=ParseMode.HTML, reply_markup=_markup(reply))
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -140,9 +148,12 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     async with context.bot_data["lock"]:
         with session_scope(context.bot_data["engine"]) as session:
-            reply = actions.handle_callback(session, settings, query.data or "")
+            reply = actions.handle_callback(session, settings, query.data or "", _now(settings).date())
     await query.answer()
     if reply is None:
+        return
+    if reply.photo is not None:  # a chart can't replace a text message, so send it as a new one
+        await _reply(query.message, reply)
         return
     try:
         await query.edit_message_text(reply.text, parse_mode=ParseMode.HTML, reply_markup=_markup(reply))
@@ -175,6 +186,8 @@ def build_app(settings: Settings) -> Application:
         owner = filters.Chat(chat_id=settings.telegram_chat_id)
         app.add_handler(CommandHandler("hariini", _report_command(actions.today_report), filters=owner))
         app.add_handler(CommandHandler("bulanini", _report_command(actions.month_report), filters=owner))
+        app.add_handler(CommandHandler("minggu", _report_command(actions.week_report), filters=owner))
+        app.add_handler(CommandHandler("grafik", _report_command(actions.chart_report), filters=owner))
         app.add_handler(CommandHandler("budget", _report_command(actions.budget_report), filters=owner))
         app.add_handler(CommandHandler("sync", sync_command, filters=owner))
         app.add_handler(CommandHandler("help", help_command, filters=owner))

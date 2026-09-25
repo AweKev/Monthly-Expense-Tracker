@@ -32,10 +32,15 @@ LAINNYA = "Lainnya"
 
 # (regex on counterparty, category). Case-insensitive, first match wins.
 SEED_RULES: list[tuple[str, str]] = [
-    (r"indomaret|alfamart|alfamidi|superindo|hypermart|lawson|family ?mart|circle ?k|toko|minimarket|madura", BELANJA),
+    (r"indomaret|alfamart|alfamidi|superindo|hypermart|lawson|family ?mart|circle ?k|toko|minimarket|madura|"
+     r"lotte|giant|transmart|tip ?top|sakinah|hero|foodhall|ranch market|grosir|sembako", BELANJA),
     (r"kopi|coffee|cafe|kafe|starbucks|janji jiwa|kenangan|fore|mixue|warung|warteg|resto|bakso|mie|ayam|"
      r"geprek|nasi|sate|mcd|mcdonald|kfc|burger|pizza|solaria|hokben|richeese|gofood|grabfood|shopeefood|"
-     r"es teh|chatime|boba|bakery|roti|makan", MAKAN),
+     r"es teh|chatime|boba|bakery|roti|makan|"
+     # common abbreviations / chains seen on QRIS names
+     r"sbux|tomoro|point coffee|kopken|gacoan|soto|rawon|pecel|penyet|penyetan|bebek|sego|martabak|dimsum|"
+     r"burjo|angkringan|lalapan|bakmi|ramen|sushi|j\.?co|dunkin|breadtalk|haus|esteh|wingstop|yoshinoya|"
+     r"marugame|gildak|kebab|seblak|cilok|gorengan|kantin|foodcourt|food court|canteen", MAKAN),
     (r"gojek|goride|gocar|grab|maxim|indrive|kai|kereta|krl|commuter|transjakarta|mrt|lrt|pertamina|shell|"
      r"spbu|bensin|parkir|tol|e-?toll|traveloka|tiket\.com|pegipegi|garuda|lion|citilink|damri", TRANSPORT),
     (r"shopee(?!pay)|tokopedia|lazada|blibli|bukalapak|tiktok ?shop|zalora|amazon|aliexpress", ONLINE),

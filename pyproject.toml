@@ -18,6 +18,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2",
     "tzdata",  # Windows has no built-in timezone database
     "python-telegram-bot[job-queue]>=21",
+    "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]

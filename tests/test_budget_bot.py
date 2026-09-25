@@ -192,7 +192,7 @@ def test_reports_render(synced):
         month = actions.month_report(db, s, TODAY).text
         budget = actions.budget_report(db, s, TODAY).text
     assert "Jumat, 25 Sep" in day and "Jatah besok" in day
-    assert "September 2026" in month and "terpakai" in month
+    assert "September 2026" in month and "Budget" in month and "fotokopi contoh print" in month
     assert "Sisa 6 hari" in budget
 
 
@@ -268,7 +268,7 @@ def test_command_menu_matches_handlers():
     from expense_tracker.bot import texts
 
     names = [name for name, _ in texts.COMMANDS]
-    assert names == ["hariini", "bulanini", "budget", "sync", "help"]
+    assert names == ["hariini", "minggu", "bulanini", "grafik", "budget", "sync", "help"]
     assert all(1 <= len(desc) <= 256 for _, desc in texts.COMMANDS)
 
     sent = []

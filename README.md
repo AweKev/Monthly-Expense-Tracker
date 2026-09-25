@@ -81,9 +81,11 @@ After that, `tracker sync` only fetches new emails.
 What it does while running:
 
 - Checks email every `TRACKER_SYNC_EVERY_MINUTES` and sends each new transaction, with buttons to change the category (once or always for that name/QR) and to confirm friend vs store.
+- A store no rule knows yet is asked about right away ("Toko baru. Ini kategori apa?"). One tap files it, and the answer is remembered for that QR code from then on. Answering "Ke teman" marks it as a person.
+- Reports are cards: numbers in aligned columns, a budget progress bar, and the names under each category, so a wrong category is easy to spot. Buttons switch between Hari ini / 7 hari / Periode; tap a category to see its transactions and fix any of them. "Grafik" sends a chart image (per category and per day, with the average daily budget line).
 - Budget: today's allowance = (monthly budget - spent before today) / days left. Top-ups don't count toward today's warning, only the month, so they get spread over the remaining days. Warns once at 80% and once when over.
 - Sends a summary every day at `TRACKER_SUMMARY_TIME`.
-- Commands: `/hariini`, `/bulanini`, `/budget`, `/sync`, `/help`.
+- Commands: `/hariini`, `/minggu`, `/bulanini`, `/grafik`, `/budget`, `/sync`, `/help`.
 - On the first run it imports your history quietly and only alerts transactions from the last 24 hours.
 
 It uses long polling, so it runs fine on your laptop with no public URL, but only while the laptop is on. Moving it to a server is phase 6.
@@ -152,6 +154,8 @@ src/expense_tracker/
   pipeline.py    sync and reparse
   summary.py     daily/monthly numbers (shared by CLI, bot and API later)
   budget.py      monthly budget split into a daily allowance
+  period.py      budget periods (calendar month or e.g. 25th to 24th)
+  charts.py      chart image for /grafik (matplotlib)
   bot/           Telegram bot: actions.py (logic, testable), texts.py (messages), app.py (Telegram glue)
   synthetic.py   fake emails for tests and the demo
 tests/

@@ -3,13 +3,13 @@
 from datetime import date, timedelta
 from html import escape as _escape
 
+from ..budget import BudgetStatus
+from ..models import Counterparty, Kind, PartyType, Transaction, TxnType
+from ..summary import DaySummary, MonthSummary, rupiah, rupiah_short
 
 def escape(value: str) -> str:
     return _escape(value, quote=False)
 
-from ..budget import BudgetStatus
-from ..models import Counterparty, Kind, PartyType, Transaction, TxnType
-from ..summary import DaySummary, MonthSummary, rupiah
 
 HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September",
@@ -134,7 +134,9 @@ def budget_report(status: BudgetStatus) -> str:
 # Shown in Telegram's "/" menu. (command, short description)
 COMMANDS = [
     ("hariini", "Pengeluaran hari ini"),
+    ("minggu", "7 hari terakhir"),
     ("bulanini", "Ringkasan periode ini"),
+    ("grafik", "Grafik periode ini"),
     ("budget", "Sisa budget dan jatah besok"),
     ("sync", "Cek email sekarang"),
     ("help", "Daftar perintah"),
@@ -143,9 +145,144 @@ COMMANDS = [
 HELP = (
     "<b>Perintah</b>\n"
     "/hariini - pengeluaran hari ini\n"
-    "/bulanini - ringkasan bulan ini\n"
+    "/minggu - 7 hari terakhir\n"
+    "/bulanini - ringkasan periode ini\n"
+    "/grafik - grafik per kategori dan per hari\n"
     "/budget - sisa budget dan jatah besok\n"
     "/sync - cek email sekarang\n\n"
-    "Setiap transaksi baru dikirim otomatis. Tombol di bawahnya buat ganti kategori "
-    "atau bilang itu teman / toko."
+    "Setiap transaksi baru dikirim otomatis. Toko baru langsung ditanya kategorinya. "
+    "Di laporan, tap kategori buat lihat isinya dan betulkan yang salah."
 )
+
+
+# ------------------------------------------------------------------ cards (v2 reports)
+# Numbers sit in a <pre> block so they line up in columns on a phone (~30 chars wide).
+
+WIDTH = 30
+
+SHORT_CATEGORY = {
+    "Makan & Minum": "Makan", "Belanja Harian": "Belanja", "Belanja Online": "Online",
+    "Transportasi": "Transport", "Tagihan & Utilitas": "Tagihan", "Pulsa & Internet": "Pulsa",
+    "Hiburan & Langganan": "Hiburan", "Transfer ke Orang": "Ke teman", "Top-up E-wallet": "Top-up",
+    "Kesehatan": "Kesehatan", "Pendidikan": "Pendidikan", "Biaya Admin": "Biaya admin",
+}
+RANGE_NAMES = {"d": "Hari ini", "w": "7 hari", "p": "Periode"}
+
+
+def short_category(category: str) -> str:
+    return SHORT_CATEGORY.get(category, category[:12])
+
+
+def _row(label: str, value: str, width: int = WIDTH) -> str:
+    room = max(1, width - len(value) - 1)
+    return f"{label[:room]:<{room}} {value}"
+
+
+def progress(ratio: float, width: int = 15) -> str:
+    filled = max(0, min(width, round(ratio * width)))
+    return "█" * filled + "░" * (width - filled) + f" {ratio:.0%}"
+
+
+def _date_range(start: date, end: date) -> str:
+    """'25 Sep s.d. 24 Okt' (end exclusive)."""
+    last = end - timedelta(days=1)
+    if start == last:
+        return f"{start.day} {BULAN[start.month - 1][:3]}"
+    left = f"{start.day}" if start.month == last.month else f"{start.day} {BULAN[start.month - 1][:3]}"
+    return f"{left} s.d. {last.day} {BULAN[last.month - 1][:3]}"
+
+
+def _pre(lines: list[str]) -> str:
+    return "<pre>" + escape("\n".join(lines)) + "</pre>"
+
+
+def _category_block(summary, max_categories: int = 8, max_items: int = 3) -> str:
+    if not summary.categories:
+        return "Belum ada pengeluaran."
+    lines: list[str] = []
+    shown = summary.categories[:max_categories]
+    for block in shown:
+        lines.append(_row(block.category, rupiah(block.total)))
+        many = len(block.items) > 1
+        for item in block.items[:max_items]:
+            extra = (f" {item.count}x" if item.count > 1 else "") + (f" {rupiah_short(item.total)}" if many else "")
+            room = WIDTH - 2 - len(extra)
+            name = item.name if len(item.name) <= room else item.name[: room - 1] + "…"
+            lines.append(f"  {name}{extra}")
+        if len(block.items) > max_items:
+            lines.append(f"  +{len(block.items) - max_items} lainnya")
+    rest = summary.categories[max_categories:]
+    if rest:
+        lines.append(_row(f"{len(rest)} kategori lain", rupiah(sum(b.total for b in rest))))
+    return "<b>Per kategori</b>\n" + _pre(lines)
+
+
+def card(summary, status: BudgetStatus, view: str, title: str | None = None) -> str:
+    """One report card. view: d (today), w (last 7 days), p (budget period)."""
+    parts: list[str] = []
+    if view == "d":
+        head = title or "Hari ini"
+        parts.append(f"<b>{head} · {tanggal(summary.start)}</b>")
+        lines = [_row("Keluar", rupiah(summary.spent))]
+        if summary.income:
+            lines.append(_row("Masuk", rupiah(summary.income)))
+        if status.enabled:
+            lines.append(_row("Jatah hari ini", rupiah(status.allowance)))
+            lines.append(progress(status.used_ratio))
+            if status.left_today >= 0:
+                lines.append(_row("Sisa hari ini", rupiah(status.left_today)))
+            else:
+                lines.append(_row("Lewat budget", rupiah(-status.left_today)))
+            if status.topups_today:
+                lines.append(_row("Top-up (ke periode)", rupiah(status.topups_today)))
+            if status.mode == "monthly" and status.days_left > 1:
+                lines.append(_row("Jatah besok", rupiah(status.tomorrow_allowance)))
+        parts.append(_pre(lines))
+    elif view == "w":
+        parts.append(f"<b>{title or '7 hari terakhir'} · {_date_range(summary.start, summary.end)}</b>")
+        lines = [_row("Keluar", rupiah(summary.spent)), _row("Rata-rata/hari", rupiah(summary.daily_average))]
+        if summary.income:
+            lines.append(_row("Masuk", rupiah(summary.income)))
+        lines.append("")
+        peak = max(summary.per_day.values(), default=0) or 1
+        for day, value in summary.per_day.items():
+            bar = "█" * round(10 * value / peak)
+            lines.append(f"{HARI[day.weekday()][:3]} {day.day:>2} {bar:<10} {rupiah_short(value) if value else '-'}")
+        parts.append(_pre(lines))
+    else:
+        period = status.period
+        label = period_label(period) if period else _date_range(summary.start, summary.end)
+        parts.append(f"<b>{title or 'Periode'} · {label}</b>")
+        lines = [_row("Keluar", rupiah(summary.spent))]
+        if summary.income:
+            lines.append(_row("Masuk", rupiah(summary.income)))
+        if status.mode == "monthly":
+            ratio = summary.spent / status.month_budget if status.month_budget else 0
+            lines += [_row("Budget", rupiah(status.month_budget)), progress(ratio),
+                      _row("Sisa", rupiah(status.month_left)),
+                      _row("Sisa hari", str(status.days_left)),
+                      _row("Jatah hari ini", rupiah(status.allowance))]
+        lines.append(_row("Rata-rata/hari", rupiah(summary.daily_average)))
+        parts.append(_pre(lines))
+        if summary.top_merchants:
+            top = [_row(i.name if len(i.name) <= 18 else i.name[:17] + "…",
+                        f"{i.count}x {rupiah_short(i.total)}") for i in summary.top_merchants]
+            parts.append("<b>Paling sering</b>\n" + _pre(top))
+    parts.append(_category_block(summary))
+    return "\n".join(parts)
+
+
+def category_detail(block, transactions: list, view: str, range_text: str) -> str:
+    lines = [f"<b>{escape(block.category)} · {RANGE_NAMES.get(view, '')} ({range_text})</b>",
+             f"{rupiah(block.total)} · {len(transactions)} transaksi"]
+    rows = []
+    for t in transactions[:20]:
+        amount = rupiah_short(t.total_out if t.kind == Kind.EXPENSE else t.fee)
+        when = t.occurred_at.strftime("%d/%m")
+        room = WIDTH - len(when) - len(amount) - 2
+        name = t.counterparty or "(tanpa nama)"
+        name = name if len(name) <= room else name[: room - 1] + "…"
+        rows.append(f"{when} {name:<{room}} {amount}")
+    if len(transactions) > 20:
+        rows.append(f"+{len(transactions) - 20} transaksi lain")
+    return "\n".join(lines) + "\n" + _pre(rows) + "\nTap transaksi di bawah untuk ganti kategorinya."
